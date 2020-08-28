@@ -1,3 +1,4 @@
+from lunr import pipeline
 from lunr import languages as lang
 from lunr.builder import Builder
 from lunr.stemmer import stemmer
@@ -5,7 +6,7 @@ from lunr.trimmer import trimmer
 from lunr.stop_word_filter import stop_word_filter
 
 
-def lunr(ref, fields, documents, languages=None):
+def lunr(ref, fields, documents, pipeline_opts = None, languages=None):
     """A convenience function to configure and construct a lunr.Index.
 
     Args:
@@ -19,12 +20,18 @@ def lunr(ref, fields, documents, languages=None):
         documents (list): The list of dictonaries representing the documents
             to index. Optionally a 2-tuple of dicts, the first one being
             the document and the second the associated attributes to it.
+        pipeline_ops (list, optional): List of index pipeline build options:
+            trimmer, stop_word_filter, stemmer. If omitted, all pipeline
+            options are included to build the index. Applies only to english.
         languages (str or list, optional): The languages to use if using
             NLTK language support, ignored if NLTK is not available.
 
     Returns:
         Index: The populated Index ready to search against.
     """
+
+    PIPELINE_OPTS = ['trimmer', 'stop_word_filter','stemmer']
+
     if languages is not None and lang.LANGUAGE_SUPPORT:
         if isinstance(languages, str):
             languages = [languages]
@@ -40,9 +47,31 @@ def lunr(ref, fields, documents, languages=None):
             )
         builder = lang.get_nltk_builder(languages)
     else:
+        
         builder = Builder()
-        builder.pipeline.add(trimmer, stop_word_filter, stemmer)
-        builder.search_pipeline.add(stemmer)
+        if pipeline_opts == None:
+            builder.pipeline.add(trimmer, stop_word_filter, stemmer)
+            builder.search_pipeline.add(stemmer)
+        else:
+            # check if valid options are included
+            if all ([opt in PIPELINE_OPTS for opt in pipeline_opts]) == False:
+                raise RuntimeError(
+                """An invalid pipeline_opt has been selected. Please choose one of:
+                trimmer, stop_word_filter, stemmer""")
+            
+            if len(pipeline_opts)> 0:
+
+                pipeline_add_list = []
+                if "trimmer" in pipeline_opts:
+                    pipeline_opts.append(trimmer)
+                if "stemmer" in pipeline_opts:
+                    pipeline_opts.append(stemmer)
+                if "stop_word_filter" in pipeline_opts:
+                    pipeline_opts.append(stop_word_filter)
+
+                builder.pipeline.add(*pipeline_add_list)
+                if 'stemmer' in pipeline_opts:
+                    builder.search_pipeline.add(stemmer)
 
     builder.ref(ref)
     for field in fields:
